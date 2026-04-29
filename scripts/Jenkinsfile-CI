@@ -59,7 +59,7 @@ pipeline {
     // ENVIRONMENT: Global Environment Variables
     //--------------------------------------------------------------------------------------
     environment {
-        REPO_NAME             = 'rms-universal-service'     // ECR repository name
+        REPO_NAME             = 'kiambu-rms-universal-service'     // ECR repository name
         DOCKERFILE_PATH       = 'scripts/Dockerfile'
         NODE_ENV              = 'development'
         DOCKER_BRANCH         = 'dev'        
