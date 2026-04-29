@@ -1,0 +1,7 @@
+
+{
+    "moduleFolderName": "modules",
+    "routeFolderName": "routes",
+    "host":"localhost",
+    "port":9006
+}

@@ -1,0 +1,314 @@
+/**
+ * Jenkins Pipeline for Building, Scanning, and Pushing a Docker Image
+ * to AWS ECR.
+ *
+ * Stages:
+ *   1. Job Triggered Notification
+ *   2. Create Full URL for Docker Image
+ *   3. SonarQube Scanning Step
+ *   4. Build Docker Image
+ *   5. Gitleaks Scan
+ *   6. Trivy Docker Image Scanning
+ *   7. Login to Docker Registry
+ *   8. Push Docker Image
+ *   9. Remove Image from Local
+ *
+ * Post Actions:
+ *   - Archive Reports
+ *   - Success: Send success email
+ *   - Failure: Send failure email
+ *   - Unstable: Send unstable email
+ *   - Cleanup: Clean workspace
+ */
+
+pipeline {
+    //--------------------------------------------------------------------------------------
+    // AGENT: Runs on any available Jenkins agent/node unless specified otherwise.
+    //--------------------------------------------------------------------------------------
+    agent any
+    //--------------------------------------------------------------------------------------
+    // TRIGGERS: Pipeline is automatically triggered by a push to a Bitbucket repository.
+    //--------------------------------------------------------------------------------------
+    triggers {
+        bitbucketPush()
+    }
+
+    //--------------------------------------------------------------------------------------
+    // OPTIONS: Best Practices for a Production Jenkins Pipeline
+    //--------------------------------------------------------------------------------------
+    options {
+        // Load properties that may be defined at the folder level in Jenkins.
+        withFolderProperties()
+
+        // Ensure only one build runs at a time for this job.
+        disableConcurrentBuilds()
+
+        // Use timestamps in the console output for easier debugging.
+        timestamps()
+
+        // Keep only a specified number of builds and artifacts to manage disk space.
+        buildDiscarder(logRotator(
+            daysToKeepStr: '30',             // Keep builds for 30 days
+            numToKeepStr: '10',              // Keep the last 10 builds
+            artifactDaysToKeepStr: '15',     // Keep artifacts for 15 days
+            artifactNumToKeepStr: '5'        // Keep artifacts for the last 5 builds
+        ))
+    }
+
+    //--------------------------------------------------------------------------------------
+    // ENVIRONMENT: Global Environment Variables
+    //--------------------------------------------------------------------------------------
+    environment {
+        REPO_NAME             = 'kiambu-rms-universal-service'     // ECR repository name
+        DOCKERFILE_PATH       = 'scripts/Dockerfile'
+        NODE_ENV              = 'development'
+        DOCKER_BRANCH         = 'dev'        
+    }
+    // Environment Variables Used:
+    // ECR_URL, DOCKER_BRANCH, NODE_ENV, DOCKERFILE_PATH, AWS_REGION, EMAIL_TO
+
+    //--------------------------------------------------------------------------------------
+    // STAGES
+    //--------------------------------------------------------------------------------------
+    stages {
+        //----------------------------------------------------------------------------------
+        // 1. Job Triggered Notification
+        //----------------------------------------------------------------------------------
+        // stage('Job Triggered Notification') {
+        //     steps {
+        //         script {
+        //             echo 'Job triggered successfully.'
+
+        //             // Send a basic informational email at pipeline start.
+        //             sendEmail(
+        //                 'INFO',
+        //                 "Jenkins Pipeline Triggered: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]",
+        //                 """
+        //                     The Jenkins pipeline has been triggered.<br><br>
+        //                     <b>Project:</b> ${env.JOB_NAME}<br>
+        //                     <b>Build Number:</b> ${env.BUILD_NUMBER}<br>
+        //                     <b>Build URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+        //                 """
+        //             )
+        //         }
+        //     }
+        // }
+
+        //----------------------------------------------------------------------------------
+        // 2. Create Full URL for Docker Image
+        //----------------------------------------------------------------------------------
+        stage('Create Full URL for Docker Image') {
+            steps {
+                script {
+                    // Construct the Docker image tag using environment variables.
+                    env.DOCKER_IMAGE = "${env.ECR_URL}/${env.REPO_NAME}:${env.DOCKER_BRANCH}-${env.BUILD_NUMBER}"
+                    echo "Docker Image URL: ${env.DOCKER_IMAGE}"
+                }
+            }
+        }
+
+        //----------------------------------------------------------------------------------
+        // 3. SonarQube Scaning
+        //----------------------------------------------------------------------------------
+        stage('SonarQube Analysis') {
+            when
+            {
+                environment name: 'NODE_ENV', value: 'development'
+            }
+            steps {
+                withCredentials([
+            string(credentialsId: 'SONAR_KIAMBU_UNIVERSAL_SERVICE_TOKEN', variable: 'SONAR_TOKEN'),
+            string(credentialsId: 'SONAR_HOST_URL', variable: 'SONAR_HOST_URL')
+        ]) {
+                sh '''#!/bin/bash
+                   /opt/sonar-scanner-5.0.1.3006-linux/bin/sonar-scanner \
+                  -Dsonar.projectKey=${JOB_BASE_NAME} \
+                  -Dsonar.sources=. \
+                  -Dsonar.host.url=$SONAR_HOST_URL \
+                  -Dsonar.token=$SONAR_TOKEN
+            '''
+        }
+            }
+        }
+        //----------------------------------------------------------------------------------
+        // 4. Build Docker Image
+        //----------------------------------------------------------------------------------
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Securely pass the Vault password to the Docker build process.
+                    withCredentials([string(credentialsId: 'VAULT_PWD', variable: 'VAULT_PWD')]) {
+                        sh """
+                            docker build \
+                                --build-arg VAULT_PWD=\$VAULT_PWD \
+                                --build-arg NODE_ENV=${env.NODE_ENV} \
+                                -f ${env.DOCKERFILE_PATH} \
+                                -t ${env.DOCKER_IMAGE} \
+                                .
+                        """
+                    }
+                }
+            }
+        }
+
+        //----------------------------------------------------------------------------------
+        // 5. Gitleaks Scan
+        //----------------------------------------------------------------------------------
+        stage('Gitleaks Scan') {
+            steps {
+                script {
+                    // Scan repository for any exposed secrets or hardcoded values.
+                    sh '''
+                        gitleaks detect \
+                            --source . \
+                            --verbose \
+                            --report-format csv \
+                            --exit-code 0 \
+                            --report-path gitleaks-report.csv
+                    '''
+                }
+            }
+        }
+
+        //----------------------------------------------------------------------------------
+        // 6. Trivy Docker Image Scanning
+        //----------------------------------------------------------------------------------
+        stage('Trivy Docker Image Scanning') {
+            steps {
+                script {
+                    // Scan the Docker image for CRITICAL and HIGH vulnerabilities.
+                    sh """
+                        trivy image \
+                            --format table \
+                            -o trivy-report.html \
+                            --severity CRITICAL,HIGH \
+                            ${env.DOCKER_IMAGE}
+                    """
+                }
+            }
+        }
+
+        //----------------------------------------------------------------------------------
+        // 7. Login to Docker Registry
+        //----------------------------------------------------------------------------------
+        stage('Login to Docker Registry') {
+            steps {
+                script {
+                    // Log in to AWS ECR using the AWS CLI.
+                    sh """
+                        aws ecr get-login-password --region ${env.AWS_REGION} \
+                            | docker login --username AWS --password-stdin ${env.ECR_URL}
+                    """
+                }
+            }
+        }
+
+        //----------------------------------------------------------------------------------
+        // 8. Push Docker Image
+        //----------------------------------------------------------------------------------
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    // Push the newly built image to ECR.
+                    sh "docker push ${env.DOCKER_IMAGE}"
+                }
+            }
+        }
+
+        //----------------------------------------------------------------------------------
+        // 9. Remove Image from Local
+        //----------------------------------------------------------------------------------
+        stage('Remove Image from Local') {
+            steps {
+                script {
+                    // Remove the Docker image from the local environment to save space.
+                    sh "docker rmi ${env.DOCKER_IMAGE}"
+                }
+            }
+        }
+    }
+
+//--------------------------------------------------------------------------------------
+// POST-BUILD ACTIONS
+//--------------------------------------------------------------------------------------
+}
+//     post {
+//         //----------------------------------------------------------------------------------
+//         // Always Archive Reports to Preserve Artifacts Before Cleanup
+//         //----------------------------------------------------------------------------------
+//         always {
+//             script {
+//                 echo 'Archiving scan reports...'
+//                 archiveArtifacts artifacts: 'trivy-report.html, gitleaks-report.csv', allowEmptyArchive: true
+//             }
+//         }
+
+//         //----------------------------------------------------------------------------------
+//         // 1. Success: Send success email
+//         //----------------------------------------------------------------------------------
+//         success {
+//             echo 'Build succeeded!'
+//             sendEmail(
+//                 'SUCCESS',
+//                 "✅ SUCCESS: Jenkins Pipeline - ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]",
+//                 'The pipeline has been successful.'
+//             )
+//         }
+
+//         //----------------------------------------------------------------------------------
+//         // 2. Failure: Send failure email
+//         //----------------------------------------------------------------------------------
+//         failure {
+//             echo 'Build failed!'
+//             sendEmail(
+//                 'FAILURE',
+//                 "❌ FAILURE: Jenkins Pipeline - ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]",
+//                 'The pipeline has failed.'
+//             )
+//         }
+
+//         //----------------------------------------------------------------------------------
+//         // 3. Unstable: Send unstable email
+//         //----------------------------------------------------------------------------------
+//         unstable {
+//             echo 'Build is unstable!'
+//             sendEmail(
+//                 'UNSTABLE',
+//                 "⚠️ UNSTABLE: Jenkins Pipeline - ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]",
+//                 'The pipeline is unstable.'
+//             )
+//         }
+
+//         //----------------------------------------------------------------------------------
+//         // 4. Cleanup: Clean workspace after all post actions
+//         //----------------------------------------------------------------------------------
+//         cleanup {
+//             echo 'Cleaning workspace as the final step...'
+//             cleanWs()
+//         }
+//     }
+// }
+
+/**
+ * Sends an email notification with optional attachments.
+ *
+ * @param status  The status of the pipeline ("SUCCESS", "FAILURE", "UNSTABLE", "INFO", etc.).
+ * @param subject The subject of the email.
+ * @param body    The main content of the email (HTML supported).
+ */
+def sendEmail(status, subject, body) {
+    emailext(
+        attachLog: (status != 'INFO'), // Attach logs only if it's not an informational message.
+        attachmentsPattern: (status != 'INFO') ? 'trivy-report.html, gitleaks-report.csv' : '',
+        mimeType: 'text/html',
+        to: "${env.EMAIL_TO}",
+        subject: subject,
+        body: """
+            <b>${body}</b><br><br>
+            <b>Status:</b> ${status}<br>
+            <b>Project:</b> ${env.JOB_NAME}<br>
+            <b>Build Number:</b> ${env.BUILD_NUMBER}<br>
+            <b>Build URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+        """
+    )
+}

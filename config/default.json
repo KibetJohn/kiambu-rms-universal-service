@@ -1,0 +1,7 @@
+{
+    "moduleFolderName": "modules",
+    "routeFolderName": "routes",
+    "host": "localhost",
+    "port": 9004,
+    "apiVersion": "1.0.0"
+}

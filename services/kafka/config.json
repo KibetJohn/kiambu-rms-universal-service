@@ -1,0 +1,22 @@
+{
+    "kafka": {
+        "CLIENTID": "messaging-app",
+        "BROKERS": [
+            "localhost:9092",
+            "localhost:9093",
+            "localhost:9094"
+        ],
+        "ZK_HOST": [
+            "localhost:2181",
+            "localhost:2182",
+            "localhost:2183"
+        ],
+        "SMS_TOPIC": "sendsms",
+        "EMAIL_TOPIC": "sendemail",
+        "APP_TOPIC": "sendapp",
+        "WHATSAPP_TOPIC": "sendwhatsapp",
+        "GROUPID": "messaging-consumer-group",
+        "GROUP_NAME":"messaging-consumer-group",
+        "batchSize": 100
+    }
+}

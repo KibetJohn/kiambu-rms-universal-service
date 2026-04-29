@@ -1,0 +1,20 @@
+exports.enums = {
+  BOOLEAN_ENUM: [true, false],
+  TRANSFORM_ENUM: ["trim", "toLowerCase"],
+  PERMIT_STATUS_ENUM: ["PENDING", "ACTIVE", "EXPIRED"],
+  PAYMENT_MODES: ["MPESSA", "MPESSA_EXPRESS", "USSD", "KCB"],
+  APPLICATION_STATUS: ["SUBMITTED", "REJECTED", "IN_PROCESS"],
+  NEW_APPLICATION_STATUS: [
+    "SUBMITTED",
+    "REJECTED",
+    "IN-PROCESS",
+    "PENDING",
+    "APPROVED",
+    "DRAFT",
+  ],
+  PAYMENT_TYPES: ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'ANNUAL'],
+  TYPES:['self', 'client'],
+  STORAGE_OWNER:['self','rented'],
+  TITLE_TYPE : ['lease_land','free_hold'],
+  NEW_PERMIT_STATUS_ENUM: ["PENDING", "ACTIVE", "EXPIRED","IN_ACTIVE"],
+};

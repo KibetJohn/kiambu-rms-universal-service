@@ -1,0 +1,31 @@
+exports.errorConstants = {
+  NOT_AUTHORIZED_TO_ACCESS_THIS_ROUTE:
+    "You are not authorize to access this route.",
+  TOKEN_IS_EXPIRED: "Session is expired.",
+  AUTH_TOKEN_IS_INVALID: "Authentication token is invalid.",
+  USER_NOT_FOUND: "User not found!",
+  INVALID_SEARCH_LENGTH: "Invalid search length.",
+  PERMIT_ALREADY_EXISTS: "Permit already exists.",
+  NO_RECORD_EXISTS: "No record exists.",
+  ADDITIONAL_PROPERTIES_ARE_NOT_ALLOWED:
+    "Additional properties are not allowed.",
+  SOMETHING_WENT_WRONG: "Something went wrong.",
+  INTERNAL_SERVER_ERROR: "Internal server error! ",
+  INVALID_LICENSE_PERMIT_ID: "Invalid license and permit Id.",
+  FAILED_UPLOAD_LICENSE_PERMIT: "Failed to add license and permit",
+  FALIED_UPDATE_REDIS: "Failed to Update data in Redis",
+  ALREADY_EXISTS: "Data already exists.",
+  PRICING_DATA_NOT_EXIST: "Pricing data does not exist.",
+  CATEGORY_EXIST: "Category already exists",
+  SUB_CATEGORY_EXIST: "Subcategory already exists",
+  INCORRECT_SUB_CATEGORY: "Incorrect subcategory selected.",
+  INCORRECT_CATEGORY: "Incorrect category selected.",
+  PERMIT_NOT_EXIST: "Permit does not exist.",
+  NOTIFICATION_NOT_EXIST: "Notification does not exist.",
+  PERMIT_INSPECTION_ACCEPTED: "Permit inspection request already accepted by someother enforcer.",
+  SERVICE_NOT_FOUND: "Service not found.",
+  DATABASE_CONNECTION_FAILED: 'Database connection failed.',
+  INVALID_DOCUMENT_NUMBER:"Invalid Document number.",
+  FAILED_APPLICATION_MEDICAL_CERTIFICATE: "Unable to submit application.",
+  FAILED_ADD_MASTER_DATA: "Failed to add master data."
+};
